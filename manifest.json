@@ -1,7 +1,8 @@
 {
+  "id": "platemates-app",
   "name": "PlateMates",
   "short_name": "PlateMates",
-  "description": "Workout tracker for up to 6 lifters that works offline",
+  "description": "Offline weightlifting tracker for up to 6 lifters on one phone.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,8 +10,8 @@
   "background_color": "#E8E9E5",
   "theme_color": "#C4302A",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

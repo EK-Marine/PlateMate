@@ -1,41 +1,106 @@
-// PlateMates service worker — bump VERSION whenever you change index.html
-const VERSION = "platemates-v3";
-const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
-const FONTS = "liftlog-fonts";
+/* PlateMates service worker */
+const VERSION = "platemates-v7";
+const SHELL_CACHE = VERSION + "-shell";
+const FONT_CACHE = VERSION + "-fonts";
 
-self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+const SHELL = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./icon-maskable-512.png",
+  "./apple-touch-icon.png",
+  "./exercise-photos.webp"
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) =>
+      Promise.all(
+        SHELL.map((url) =>
+          cache.add(new Request(url, { cache: "reload" })).catch(() => {})
+        )
+      )
+    ).then(() => self.skipWaiting())
+  );
 });
 
-self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(
-    keys.filter(k => k !== VERSION && k !== FONTS).map(k => caches.delete(k))
-  )).then(() => self.clients.claim()));
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((k) => k !== SHELL_CACHE && k !== FONT_CACHE)
+          .map((k) => caches.delete(k))
+      )
+    ).then(() => self.clients.claim())
+  );
 });
 
-self.addEventListener("fetch", e => {
-  const req = e.request;
+function isFont(url) {
+  return url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
+}
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // Google Fonts: cache forever once seen
-  if (url.host === "fonts.googleapis.com" || url.host === "fonts.gstatic.com") {
-    e.respondWith(caches.open(FONTS).then(async c => {
-      const hit = await c.match(req);
-      if (hit) return hit;
-      try { const res = await fetch(req); c.put(req, res.clone()); return res; }
-      catch (err) { return new Response("", { status: 504 }); }
-    }));
+  // Google Fonts: separate cache, cache-first with background refresh
+  if (isFont(url)) {
+    event.respondWith(staleWhileRevalidate(req, FONT_CACHE, event));
     return;
   }
 
-  if (url.origin !== location.origin) return;
+  // Only handle same-origin requests inside our scope
+  if (url.origin !== self.location.origin) return;
+  const scope = new URL(self.registration.scope);
+  if (!url.pathname.startsWith(scope.pathname)) return;
 
-  // App shell: serve from cache instantly, refresh in background when online
-  e.respondWith(caches.open(VERSION).then(async c => {
-    const key = req.mode === "navigate" ? "./index.html" : req;
-    const hit = await c.match(key);
-    const net = fetch(req).then(res => { if (res.ok) c.put(key, res.clone()); return res; }).catch(() => null);
-    return hit || (await net) || new Response("Offline", { status: 503 });
-  }));
+  // Navigations fall back to the cached app shell
+  if (req.mode === "navigate") {
+    event.respondWith(
+      caches.open(SHELL_CACHE).then(async (cache) => {
+        const cached =
+          (await cache.match(req, { ignoreSearch: true })) ||
+          (await cache.match("./index.html")) ||
+          (await cache.match("./"));
+        const network = fetch(req)
+          .then((res) => {
+            if (res && res.ok) cache.put("./index.html", res.clone()).catch(() => {});
+            return res;
+          })
+          .catch(() => null);
+        if (cached) {
+          event.waitUntil(network);
+          return cached;
+        }
+        const res = await network;
+        return res || new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } });
+      })
+    );
+    return;
+  }
+
+  event.respondWith(staleWhileRevalidate(req, SHELL_CACHE, event));
 });
+
+async function staleWhileRevalidate(req, cacheName, event) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(req, { ignoreSearch: cacheName === SHELL_CACHE });
+  const network = fetch(req)
+    .then((res) => {
+      if (res && (res.ok || res.type === "opaque")) {
+        cache.put(req, res.clone()).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => null);
+  if (cached) {
+    event.waitUntil(network);
+    return cached;
+  }
+  const res = await network;
+  return res || new Response("", { status: 504 });
+}
