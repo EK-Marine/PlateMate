@@ -1,5 +1,5 @@
 /* PlateMates service worker */
-const VERSION = "platemates-v7";
+const VERSION = "platemates-v17";
 const SHELL_CACHE = VERSION + "-shell";
 const FONT_CACHE = VERSION + "-fonts";
 
@@ -10,8 +10,7 @@ const SHELL = [
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",
-  "./apple-touch-icon.png",
-  "./exercise-photos.webp"
+  "./apple-touch-icon.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -55,6 +54,9 @@ self.addEventListener("fetch", (event) => {
 
   // Only handle same-origin requests inside our scope
   if (url.origin !== self.location.origin) return;
+
+  // Exercise photos are online-only: never cached by the service worker
+  if (url.pathname.endsWith("/exercise-photos.webp")) return;
   const scope = new URL(self.registration.scope);
   if (!url.pathname.startsWith(scope.pathname)) return;
 
